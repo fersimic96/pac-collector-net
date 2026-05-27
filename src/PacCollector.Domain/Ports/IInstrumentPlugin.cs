@@ -13,7 +13,7 @@ public interface IInstrumentPlugin
     IReadOnlyList<string> SupportedTypes { get; }
 
     Sample ParseMessage(
-        ReadOnlySpan<byte> raw,
+        ReadOnlyMemory<byte> raw,
         string? sourceIp,
         DateTimeOffset receivedAt);
 
@@ -21,10 +21,10 @@ public interface IInstrumentPlugin
 
     bool IsPrintPlugin => false;
 
-    bool AcceptsPrintFormat(ReadOnlySpan<byte> raw) => false;
+    bool AcceptsPrintFormat(ReadOnlyMemory<byte> raw) => false;
 
     Sample ParsePrintMessage(
-        ReadOnlySpan<byte> raw,
+        ReadOnlyMemory<byte> raw,
         string? sourceIp,
         DateTimeOffset receivedAt)
         => throw new MalformedMessageException("this plugin does not support print mode");

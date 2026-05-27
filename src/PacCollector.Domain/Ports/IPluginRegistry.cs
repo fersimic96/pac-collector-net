@@ -5,7 +5,7 @@ namespace PacCollector.Domain.Ports;
 public interface IPluginRegistry
 {
     IInstrumentPlugin? FindForType(string analyzerType);
-    IInstrumentPlugin? FindForPrint(ReadOnlySpan<byte> raw);
+    IInstrumentPlugin? FindForPrint(ReadOnlyMemory<byte> raw);
     IReadOnlyList<PluginInfo> List();
     void SetEnabled(string id, bool enabled);
 }

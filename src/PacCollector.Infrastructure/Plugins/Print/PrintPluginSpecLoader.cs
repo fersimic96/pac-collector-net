@@ -1,0 +1,90 @@
+using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using PacCollector.Domain.Errors;
+
+namespace PacCollector.Infrastructure.Plugins.Print;
+
+// carga PrintPluginSpec desde JSON. Tres fuentes en orden:
+//   1) override en disco: <pluginsDir>/print/*.json
+//   2) embedded resources del assembly: PacCollector.Infrastructure.Plugins.Print.Specs.*.json
+// dejar override en disco permite agregar/cambiar equipos sin recompilar.
+public static class PrintPluginSpecLoader
+{
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) },
+    };
+
+    public static IReadOnlyList<PrintPluginSpec> LoadAll(string? overrideDir = null)
+    {
+        var specs = new Dictionary<string, PrintPluginSpec>(StringComparer.Ordinal);
+
+        foreach (var spec in LoadEmbedded())
+            specs[spec.Id] = spec;
+
+        if (!string.IsNullOrEmpty(overrideDir) && Directory.Exists(overrideDir))
+            foreach (var spec in LoadFromDirectory(overrideDir))
+                specs[spec.Id] = spec;
+
+        return specs.Values.ToList();
+    }
+
+    private static IEnumerable<PrintPluginSpec> LoadEmbedded()
+    {
+        var asm = typeof(PrintPluginSpecLoader).Assembly;
+        const string prefix = "PacCollector.Infrastructure.Plugins.Print.Specs.";
+        foreach (var name in asm.GetManifestResourceNames())
+        {
+            if (!name.StartsWith(prefix, StringComparison.Ordinal)) continue;
+            if (!name.EndsWith(".json", StringComparison.Ordinal)) continue;
+            using var stream = asm.GetManifestResourceStream(name);
+            if (stream is null) continue;
+            using var reader = new StreamReader(stream);
+            var raw = reader.ReadToEnd();
+            var spec = Parse(raw, source: name);
+            if (spec is not null) yield return spec;
+        }
+    }
+
+    private static IEnumerable<PrintPluginSpec> LoadFromDirectory(string dir)
+    {
+        foreach (var path in Directory.GetFiles(dir, "*.json", SearchOption.TopDirectoryOnly))
+        {
+            string raw;
+            try { raw = File.ReadAllText(path); }
+            catch { continue; }
+            var spec = Parse(raw, source: path);
+            if (spec is not null) yield return spec;
+        }
+    }
+
+    private static PrintPluginSpec? Parse(string json, string source)
+    {
+        try
+        {
+            var spec = JsonSerializer.Deserialize<PrintPluginSpec>(json, JsonOptions);
+            if (spec is null) return null;
+            ValidateOrThrow(spec, source);
+            return spec;
+        }
+        catch (JsonException e)
+        {
+            throw new ConfigInvalidException("print_plugin_spec", $"failed to parse {source}: {e.Message}");
+        }
+    }
+
+    private static void ValidateOrThrow(PrintPluginSpec spec, string source)
+    {
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(spec.Id)) errors.Add("id is required");
+        if (string.IsNullOrWhiteSpace(spec.AnalyzerType)) errors.Add("analyzerType is required");
+        if (string.IsNullOrWhiteSpace(spec.HeaderMarker)) errors.Add("headerMarker is required");
+        if (errors.Count > 0)
+            throw new ConfigInvalidException("print_plugin_spec", $"{source}: {string.Join("; ", errors)}");
+    }
+}

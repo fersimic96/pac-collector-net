@@ -26,4 +26,8 @@
     <ProjectReference Include="..\..\src\PacCollector.Application\PacCollector.Application.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Fixtures\*.bin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="PacCollector.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="PacCollector.ParityTests" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -14,6 +14,11 @@ using PacCollector.Infrastructure.Plugins;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// dual-mode: con --service corre como Windows Service. Sin args corre standalone Kestrel.
+if (args.Contains("--service"))
+    builder.Host.UseWindowsService();
+builder.WebHost.UseUrls("http://127.0.0.1:5174");
+
 // ── data paths (resueltos contra el directorio del usuario) ──
 var dataDir = ResolveDataDir(builder.Configuration);
 var dbDir = Path.Combine(dataDir, "db");
@@ -76,6 +81,14 @@ builder.Services.AddCors(opt => opt.AddDefaultPolicy(p =>
 var app = builder.Build();
 app.UseCors();
 app.UseWebSockets();
+
+// servir el frontend buildeado (cuando exista wwwroot/)
+var wwwroot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+if (Directory.Exists(wwwroot))
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
 
 // arrancar los listeners si la config dice auto_start_server
 if (configStore.Snapshot().General.AutoStartServer)

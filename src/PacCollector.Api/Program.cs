@@ -25,15 +25,18 @@ var dbDir = Path.Combine(dataDir, "db");
 var recentDir = Path.Combine(dataDir, "recent");
 var configPath = Path.Combine(dataDir, "settings.json");
 var instrumentsPath = Path.Combine(dataDir, "instruments.json");
+var limsPluginsOverrideDir = Path.Combine(dataDir, "plugins", "lims");
 var printPluginsOverrideDir = Path.Combine(dataDir, "plugins", "print");
 Directory.CreateDirectory(dataDir);
 Directory.CreateDirectory(dbDir);
 Directory.CreateDirectory(recentDir);
+Directory.CreateDirectory(limsPluginsOverrideDir);
+Directory.CreateDirectory(printPluginsOverrideDir);
 
 // ── singletons del lado infrastructure ──
 var configStore = ConfigStore.Load(configPath);
 var instrumentRepo = JsonInstrumentRepository.Load(instrumentsPath);
-var pluginRegistry = PluginRegistryImpl.LoadBuiltin(printPluginsOverrideDir);
+var pluginRegistry = PluginRegistryImpl.LoadBuiltin(limsPluginsOverrideDir, printPluginsOverrideDir);
 var eventBus = new ChannelEventBus();
 
 builder.Services.AddSingleton(configStore);
@@ -66,12 +69,13 @@ builder.Services.AddSingleton(sp => new ListenerManager(
 builder.Services.AddSingleton<NetworkInfoService>();
 builder.Services.AddSingleton<SystemService>();
 
-// JSON: camelCase + ignorar nulls al serializar (UI lo prefiere)
+// JSON: camelCase para propiedades + snake_case para enums (matchea convencion del frontend)
+// NO ignorar nulls: el frontend espera que todos los campos opcionales esten presentes con null
 builder.Services.ConfigureHttpJsonOptions(opt =>
 {
     opt.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-    opt.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-    opt.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+    opt.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
+    opt.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower));
 });
 
 // CORS permisivo solo para el frontend local

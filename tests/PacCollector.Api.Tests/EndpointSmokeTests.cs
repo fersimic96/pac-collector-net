@@ -51,13 +51,14 @@ public class EndpointSmokeTests : IClassFixture<ApiFixture>
     }
 
     [Fact]
-    public async Task ListPlugins_Returns10Plugins()
+    public async Task ListPlugins_Returns7LimsPlugins()
     {
-        // 7 LIMS JSON + 3 Print = 10
+        // /api/plugins lista solo plugins LIMS (7 equipos PAC). Los print plugins
+        // son detalle interno (se aplican via sniff de bytes en FindForPrint).
         var resp = await Client.GetAsync("/api/plugins");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
-        body.GetArrayLength().Should().Be(10);
+        body.GetArrayLength().Should().Be(7);
     }
 
     [Fact]

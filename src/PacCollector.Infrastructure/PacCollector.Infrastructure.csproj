@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Plugins\Print\Specs\*.json" />
+    <EmbeddedResource Include="Plugins\Builtin\Specs\*.json" />
   </ItemGroup>
 
   <ItemGroup>

@@ -20,11 +20,15 @@ public sealed class PluginRegistryImpl : IPluginRegistry
         _plugins = plugins.Select(p => new RegisteredPlugin(p, true)).ToList();
     }
 
-    // factory recomendada: carga los 7 LIMS + 3 print desde recursos embebidos
-    public static PluginRegistryImpl LoadBuiltin(string? printPluginsOverrideDir = null)
+    // factory recomendada: carga los specs LIMS y print desde JSON embebidos.
+    // Si se pasa un override dir, los .json de disco pisan los embedded (por pluginId).
+    // Esto permite agregar/cambiar equipos PAC sin tocar codigo.
+    public static PluginRegistryImpl LoadBuiltin(
+        string? limsPluginsOverrideDir = null,
+        string? printPluginsOverrideDir = null)
     {
         var plugins = new List<IInstrumentPlugin>();
-        foreach (var spec in BuiltinSpecs.All)
+        foreach (var spec in PacInstrumentSpecLoader.LoadAll(limsPluginsOverrideDir))
             plugins.Add(new PacFamilyPlugin(spec));
         foreach (var spec in PrintPluginSpecLoader.LoadAll(printPluginsOverrideDir))
             plugins.Add(new ConfigurablePrintPlugin(spec));
@@ -54,8 +58,12 @@ public sealed class PluginRegistryImpl : IPluginRegistry
         return null;
     }
 
+    // expone solo plugins LIMS JSON al listado del UI. Los print plugins son detalle
+    // interno (se acceden via FindForPrint con sniff de bytes, no por AnalyzerType).
+    // si se incluyeran, AnalyzerType dupplicaria entre LIMS y print (mismo equipo).
     public IReadOnlyList<PluginInfo> List()
         => _plugins
+            .Where(r => !r.Plugin.IsPrintPlugin)
             .Select(r => new PluginInfo(
                 Id: r.Plugin.Id,
                 DisplayName: r.Plugin.DisplayName,

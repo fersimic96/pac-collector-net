@@ -13,7 +13,13 @@ namespace PacCollector.Infrastructure.Plugins;
 // FindForPrint: itera los plugins print preguntando AcceptsPrintFormat
 public sealed class PluginRegistryImpl : IPluginRegistry
 {
-    private readonly List<RegisteredPlugin> _plugins;
+    // lock para que Reload swap sea atomico contra lecturas de FindForType/FindForPrint/List
+    private readonly Lock _gate = new();
+    private List<RegisteredPlugin> _plugins;
+
+    // override dirs guardados para que Reload() pueda releer del mismo lugar
+    private string? _limsOverrideDir;
+    private string? _printOverrideDir;
 
     public PluginRegistryImpl(IEnumerable<IInstrumentPlugin> plugins)
     {
@@ -27,17 +33,49 @@ public sealed class PluginRegistryImpl : IPluginRegistry
         string? limsPluginsOverrideDir = null,
         string? printPluginsOverrideDir = null)
     {
-        var plugins = new List<IInstrumentPlugin>();
-        foreach (var spec in PacInstrumentSpecLoader.LoadAll(limsPluginsOverrideDir))
-            plugins.Add(new PacFamilyPlugin(spec));
-        foreach (var spec in PrintPluginSpecLoader.LoadAll(printPluginsOverrideDir))
-            plugins.Add(new ConfigurablePrintPlugin(spec));
-        return new PluginRegistryImpl(plugins);
+        var registry = new PluginRegistryImpl(LoadFromSpecs(limsPluginsOverrideDir, printPluginsOverrideDir))
+        {
+            _limsOverrideDir = limsPluginsOverrideDir,
+            _printOverrideDir = printPluginsOverrideDir,
+        };
+        return registry;
+    }
+
+    private static IEnumerable<IInstrumentPlugin> LoadFromSpecs(string? limsDir, string? printDir)
+    {
+        foreach (var spec in PacInstrumentSpecLoader.LoadAll(limsDir))
+            yield return new PacFamilyPlugin(spec);
+        foreach (var spec in PrintPluginSpecLoader.LoadAll(printDir))
+            yield return new ConfigurablePrintPlugin(spec);
+    }
+
+    // releere los specs desde los override dirs configurados y reemplaza el set
+    // de plugins activos atomicamente. Preserva el estado enabled de plugins que
+    // sobreviven al reload (matched por Id). Si el reload tira, NO toca el estado actual.
+    public void Reload()
+    {
+        IReadOnlyDictionary<string, bool> previousEnabled;
+        lock (_gate)
+        {
+            previousEnabled = _plugins.ToDictionary(p => p.Plugin.Id, p => p.Enabled, StringComparer.Ordinal);
+        }
+
+        // construir afuera del lock para que las lecturas no se bloqueen mientras parseamos JSON
+        var fresh = LoadFromSpecs(_limsOverrideDir, _printOverrideDir)
+            .Select(p => new RegisteredPlugin(p, previousEnabled.GetValueOrDefault(p.Id, defaultValue: true)))
+            .ToList();
+
+        lock (_gate)
+        {
+            _plugins = fresh;
+        }
     }
 
     public IInstrumentPlugin? FindForType(string analyzerType)
     {
-        foreach (var reg in _plugins)
+        List<RegisteredPlugin> snapshot;
+        lock (_gate) snapshot = _plugins;
+        foreach (var reg in snapshot)
         {
             if (!reg.Enabled) continue;
             if (reg.Plugin.IsPrintPlugin) continue;
@@ -49,7 +87,9 @@ public sealed class PluginRegistryImpl : IPluginRegistry
 
     public IInstrumentPlugin? FindForPrint(ReadOnlyMemory<byte> raw)
     {
-        foreach (var reg in _plugins)
+        List<RegisteredPlugin> snapshot;
+        lock (_gate) snapshot = _plugins;
+        foreach (var reg in snapshot)
         {
             if (!reg.Enabled) continue;
             if (!reg.Plugin.IsPrintPlugin) continue;
@@ -62,7 +102,10 @@ public sealed class PluginRegistryImpl : IPluginRegistry
     // interno (se acceden via FindForPrint con sniff de bytes, no por AnalyzerType).
     // si se incluyeran, AnalyzerType dupplicaria entre LIMS y print (mismo equipo).
     public IReadOnlyList<PluginInfo> List()
-        => _plugins
+    {
+        List<RegisteredPlugin> snapshot;
+        lock (_gate) snapshot = _plugins;
+        return snapshot
             .Where(r => !r.Plugin.IsPrintPlugin)
             .Select(r => new PluginInfo(
                 Id: r.Plugin.Id,
@@ -73,11 +116,23 @@ public sealed class PluginRegistryImpl : IPluginRegistry
                 Source: new PluginSource.Builtin(),
                 Enabled: r.Enabled))
             .ToList();
+    }
 
     public void SetEnabled(string id, bool enabled)
     {
-        var reg = _plugins.FirstOrDefault(r => string.Equals(r.Plugin.Id, id, StringComparison.Ordinal));
-        if (reg is not null) reg.Enabled = enabled;
+        lock (_gate)
+        {
+            var reg = _plugins.FirstOrDefault(r => string.Equals(r.Plugin.Id, id, StringComparison.Ordinal));
+            if (reg is not null) reg.Enabled = enabled;
+        }
+    }
+
+    // ids de TODOS los plugins activos (LIMS y print). Lo usan los upload/reload
+    // para verificar que un plugin recien subido aparecio en el registry.
+    public IReadOnlyCollection<string> AllPluginIds()
+    {
+        lock (_gate)
+            return _plugins.Select(r => r.Plugin.Id).ToList();
     }
 
     private sealed class RegisteredPlugin

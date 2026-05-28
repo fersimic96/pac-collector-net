@@ -42,6 +42,7 @@ var eventBus = new ChannelEventBus();
 builder.Services.AddSingleton(configStore);
 builder.Services.AddSingleton<IInstrumentRepository>(instrumentRepo);
 builder.Services.AddSingleton<IPluginRegistry>(pluginRegistry);
+builder.Services.AddSingleton(pluginRegistry); // impl concreta para uploads/reload
 builder.Services.AddSingleton<ChannelEventBus>(eventBus);
 builder.Services.AddSingleton<IEventBus>(eventBus);
 builder.Services.AddSingleton<ISampleRepository>(_ => new InMemorySampleRepository());
@@ -68,6 +69,10 @@ builder.Services.AddSingleton(sp => new ListenerManager(
 // ── api helpers ──
 builder.Services.AddSingleton<NetworkInfoService>();
 builder.Services.AddSingleton<SystemService>();
+builder.Services.AddSingleton(sp => new PluginUploadService(
+    sp.GetRequiredService<PluginRegistryImpl>(),
+    limsPluginsOverrideDir,
+    printPluginsOverrideDir));
 
 // JSON: camelCase para propiedades + snake_case para enums (matchea convencion del frontend)
 // NO ignorar nulls: el frontend espera que todos los campos opcionales esten presentes con null

@@ -1,5 +1,10 @@
 using PacCollector.Shell;
 using Photino.NET;
+using Velopack;
+
+// hook de velopack: maneja install/uninstall/update hooks del installer.
+// si la app NO esta instalada via velopack es no-op.
+VelopackApp.Build().Run();
 
 const string ApiUrl = "http://127.0.0.1:5174";
 const string HealthUrl = ApiUrl + "/api/health";

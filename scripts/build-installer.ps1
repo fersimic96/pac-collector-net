@@ -1,0 +1,67 @@
+# build-installer.ps1 — empaqueta el .exe Velopack en una pasada.
+# Uso (Windows):
+#   pwsh ./scripts/build-installer.ps1 -Version 0.1.0
+# Requiere: dotnet SDK 10, vpk tool (se instala si falta).
+
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true)][string]$Version,
+    [string]$Runtime = "win-x64",
+    [string]$Configuration = "Release"
+)
+
+$ErrorActionPreference = "Stop"
+$root = Split-Path -Parent $PSScriptRoot
+Set-Location $root
+
+# 1) instalar vpk si falta
+if (-not (Get-Command vpk -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing vpk tool..."
+    dotnet tool install --global vpk
+}
+
+# 2) publish del Api (Windows Service host)
+$publishDir = Join-Path $root "publish"
+if (Test-Path $publishDir) { Remove-Item -Recurse -Force $publishDir }
+New-Item -ItemType Directory -Path $publishDir | Out-Null
+
+Write-Host "Publishing PacCollector.Api..."
+dotnet publish src/PacCollector.Api/PacCollector.Api.csproj `
+    -c $Configuration -r $Runtime --self-contained `
+    -p:PublishSingleFile=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
+    -o $publishDir
+
+# 3) publish del Shell (Photino) en la misma carpeta para que queden colaterales
+Write-Host "Publishing PacCollector.Shell..."
+dotnet publish src/PacCollector.Shell/PacCollector.Shell.csproj `
+    -c $Configuration -r $Runtime --self-contained `
+    -p:PublishSingleFile=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
+    -o $publishDir
+
+# 4) (opcional) copiar el frontend buildeado al wwwroot del Api
+$frontendDist = Join-Path $root "frontend/dist"
+if (Test-Path $frontendDist) {
+    $wwwroot = Join-Path $publishDir "wwwroot"
+    if (Test-Path $wwwroot) { Remove-Item -Recurse -Force $wwwroot }
+    Copy-Item -Recurse $frontendDist $wwwroot
+    Write-Host "wwwroot/ poblado desde frontend/dist/"
+}
+
+# 5) empaquetar con vpk
+$releasesDir = Join-Path $root "releases"
+if (-not (Test-Path $releasesDir)) { New-Item -ItemType Directory -Path $releasesDir | Out-Null }
+
+Write-Host "Packing with vpk..."
+vpk pack `
+    --packId PacCollector `
+    --packVersion $Version `
+    --packDir $publishDir `
+    --mainExe PacCollector.Shell.exe `
+    --packTitle "PAC Collector" `
+    --packAuthors "PAC Collector" `
+    --outputDir $releasesDir
+
+Write-Host "Installer listo en: $releasesDir"
+Get-ChildItem $releasesDir | Format-Table Name, Length

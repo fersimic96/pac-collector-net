@@ -10,6 +10,24 @@ public sealed class AppConfig
     public Dictionary<string, InstrumentSettings> Instruments { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, InstrumentRoute> InstrumentRoutes { get; set; } = new(StringComparer.Ordinal);
 
+    // deep clone para que Snapshot del ConfigStore no comparta referencias mutables
+    public AppConfig Clone()
+    {
+        var copy = new AppConfig
+        {
+            Version = Version,
+            General = General.Clone(),
+            OutputFormats = OutputFormats.Clone(),
+            Instruments = new Dictionary<string, InstrumentSettings>(StringComparer.Ordinal),
+            InstrumentRoutes = new Dictionary<string, InstrumentRoute>(StringComparer.Ordinal),
+        };
+        foreach (var (k, v) in Instruments)
+            copy.Instruments[k] = v.Clone();
+        foreach (var (k, v) in InstrumentRoutes)
+            copy.InstrumentRoutes[k] = v.Clone();
+        return copy;
+    }
+
     public IReadOnlyList<string> Validate()
     {
         var errs = new List<string>();

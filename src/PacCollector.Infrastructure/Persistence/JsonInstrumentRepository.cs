@@ -68,7 +68,7 @@ public sealed class JsonInstrumentRepository : IInstrumentRepository
     public async Task IncrementSampleCountAsync(string serial, CancellationToken ct = default)
     {
         if (_bySerial.TryGetValue(serial, out var inst))
-            inst.TotalSamples++;
+            inst.IncrementTotalSamples();
         await PersistAsync(ct);
     }
 
@@ -87,16 +87,25 @@ public sealed class JsonInstrumentRepository : IInstrumentRepository
             if (!string.IsNullOrEmpty(parent))
                 Directory.CreateDirectory(parent);
 
-            var tmp = _path + ".tmp";
-            await using (var fs = new FileStream(
-                tmp, FileMode.Create, FileAccess.Write, FileShare.None,
-                bufferSize: 4096, FileOptions.WriteThrough | FileOptions.Asynchronous))
+            var tmp = $"{_path}.{Guid.NewGuid():N}.tmp";
+            try
             {
-                var bytes = System.Text.Encoding.UTF8.GetBytes(json);
-                await fs.WriteAsync(bytes, ct);
-                await fs.FlushAsync(ct);
+                await using (var fs = new FileStream(
+                    tmp, FileMode.Create, FileAccess.Write, FileShare.None,
+                    bufferSize: 4096, FileOptions.WriteThrough | FileOptions.Asynchronous))
+                {
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+                    await fs.WriteAsync(bytes, ct);
+                    await fs.FlushAsync(ct);
+                    fs.Flush(flushToDisk: true);
+                }
+                File.Move(tmp, _path, overwrite: true);
             }
-            File.Move(tmp, _path, overwrite: true);
+            catch
+            {
+                try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* best-effort cleanup */ }
+                throw;
+            }
         }
         finally
         {

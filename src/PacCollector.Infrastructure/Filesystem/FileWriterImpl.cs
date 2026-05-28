@@ -55,22 +55,26 @@ public sealed class FileWriterImpl : IFileWriter
 
         var jsonPath = Path.Combine(dbRoot, "json", $"{baseName}.json");
         if (formats.WriteJson)
-            await File.WriteAllTextAsync(jsonPath, sample.RawJson, ct);
+            await AtomicWriter.WriteAllTextAsync(jsonPath, sample.RawJson, ct);
 
         var txtPath = Path.Combine(dbRoot, "samples", $"{baseName}.txt");
         if (formats.WriteLimsTxt && isDistillation)
         {
             var body = LimsClassicText(sample, delimiter, eolStr, showKey, showUnit);
-            await File.WriteAllTextAsync(txtPath, body, ct);
+            await AtomicWriter.WriteAllTextAsync(txtPath, body, ct);
         }
 
         var reportPath = Path.Combine(dbRoot, "reports", $"{baseName}.legible.txt");
+        string? reportBody = null;
         if (formats.WriteLegibleTxt)
-            await File.WriteAllTextAsync(reportPath, LegibleReport(sample), ct);
+        {
+            reportBody = LegibleReport(sample);
+            await AtomicWriter.WriteAllTextAsync(reportPath, reportBody, ct);
+        }
 
         var curvePath = Path.Combine(dbRoot, "curves", $"{baseName}.curva.csv");
         if (formats.WriteCurveCsv && !sample.Curve.IsEmpty)
-            await File.WriteAllTextAsync(curvePath, CurveCsv(sample), ct);
+            await AtomicWriter.WriteAllTextAsync(curvePath, CurveCsv(sample), ct);
 
         await WriteHotFolderAsync(sample, cfg, baseName, isDistillation, ct);
 
@@ -86,9 +90,9 @@ public sealed class FileWriterImpl : IFileWriter
                 TryCopy(curvePath, Path.Combine(recentRoot, "curves", $"{baseName}.curva.csv"));
         }
 
-        if (formats.WriteLegibleTxt)
-            try { await File.WriteAllTextAsync(Path.Combine(dbRoot, "latest.txt"), reportPath, ct); }
-            catch { /* best-effort */ }
+        if (formats.WriteLegibleTxt && reportBody is not null)
+            try { await AtomicWriter.WriteAllTextAsync(Path.Combine(dbRoot, "latest.txt"), reportBody, ct); }
+            catch (Exception e) when (e is not OutOfMemoryException) { /* best-effort */ }
 
         await _writeLock.WaitAsync(ct);
         try
@@ -130,11 +134,7 @@ public sealed class FileWriterImpl : IFileWriter
         var ext = isText ? "json" : "bin";
         var payloadPath = Path.Combine(unknownRoot, $"{ts}_{ipPart}.{ext}");
 
-        await using (var fs = new FileStream(payloadPath, FileMode.Create, FileAccess.Write, FileShare.None,
-            4096, FileOptions.Asynchronous))
-        {
-            await fs.WriteAsync(raw, ct);
-        }
+        await AtomicWriter.WriteAllBytesAsync(payloadPath, raw, ct);
 
         var meta = new
         {
@@ -149,9 +149,9 @@ public sealed class FileWriterImpl : IFileWriter
         try
         {
             var metaJson = JsonSerializer.Serialize(meta, JsonOptions.Pretty);
-            await File.WriteAllTextAsync(metaPath, metaJson, ct);
+            await AtomicWriter.WriteAllTextAsync(metaPath, metaJson, ct);
         }
-        catch { /* metadata is best-effort */ }
+        catch (Exception e) when (e is not OutOfMemoryException) { /* metadata is best-effort */ }
 
         return new UnknownPayloadSaved(payloadPath);
     }
@@ -459,21 +459,21 @@ public sealed class FileWriterImpl : IFileWriter
 
         try
         {
-            await File.WriteAllTextAsync(Path.Combine(dir, payload.Value.filename), payload.Value.body, ct);
+            await AtomicWriter.WriteAllTextAsync(Path.Combine(dir, payload.Value.filename), payload.Value.body, ct);
         }
-        catch (Exception e)
+        catch (Exception e) when (e is not OutOfMemoryException)
         {
             throw new ConfigInvalidException("hot_folder_dir", $"write hot folder: {e.Message}");
         }
     }
 
-    // master.csv append-only con header en la primera escritura
+    // master.csv append-only con header en la primera escritura, write-through + fsync para durability
     private static async Task AppendMasterCsvAsync(string path, string row, CancellationToken ct)
     {
         var needsHeader = !File.Exists(path);
         await using var fs = new FileStream(
             path, FileMode.Append, FileAccess.Write, FileShare.Read,
-            4096, FileOptions.Asynchronous);
+            4096, FileOptions.WriteThrough | FileOptions.Asynchronous);
         if (needsHeader)
         {
             var header = Encoding.UTF8.GetBytes(MasterHeader);
@@ -482,6 +482,7 @@ public sealed class FileWriterImpl : IFileWriter
         var bytes = Encoding.UTF8.GetBytes(row);
         await fs.WriteAsync(bytes, ct);
         await fs.FlushAsync(ct);
+        fs.Flush(flushToDisk: true);
     }
 
     private static string CsvEscape(string s)

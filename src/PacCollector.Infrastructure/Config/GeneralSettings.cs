@@ -16,6 +16,24 @@ public sealed class GeneralSettings
     public bool AutoStartServer { get; set; } = true;
     public bool PrintServerEnabled { get; set; }
     public ushort PrintPort { get; set; } = 631;
+
+    public GeneralSettings Clone() => new()
+    {
+        Delimiter = Delimiter,
+        Eol = Eol,
+        ShowKey = ShowKey,
+        ShowUnit = ShowUnit,
+        ShowAnalyzerSn = ShowAnalyzerSn,
+        ShowSampleId = ShowSampleId,
+        ShowStartTime = ShowStartTime,
+        DbDir = DbDir,
+        RecentDir = RecentDir,
+        RecentKeep = RecentKeep,
+        SelectedIp = SelectedIp,
+        AutoStartServer = AutoStartServer,
+        PrintServerEnabled = PrintServerEnabled,
+        PrintPort = PrintPort,
+    };
 }
 
 public static class EolTranslator

@@ -11,8 +11,16 @@ public sealed class Instrument
     public string? Firmware { get; set; }
     public DateTimeOffset FirstSeenAt { get; }
     public DateTimeOffset LastSeenAt { get; set; }
-    public ulong TotalSamples { get; set; }
+    private ulong _totalSamples;
+    public ulong TotalSamples
+    {
+        get => _totalSamples;
+        set => _totalSamples = value;
+    }
     public bool Enabled { get; set; }
+
+    // increment atomico para el caso concurrente de muestras del mismo serial
+    public ulong IncrementTotalSamples() => Interlocked.Increment(ref _totalSamples);
 
     public Instrument(
         AnalyzerSerial serial,
@@ -32,7 +40,7 @@ public sealed class Instrument
         FirstSeenAt = firstSeenAt;
         LastSeenAt = lastSeenAt;
         Alias = alias;
-        TotalSamples = totalSamples;
+        _totalSamples = totalSamples;
         Enabled = enabled;
     }
 

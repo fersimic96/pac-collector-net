@@ -11,4 +11,17 @@ public sealed class InstrumentSettings
     public List<string>? SelectedParameters { get; set; }
     public string? HotFolderDir { get; set; }
     public HotFolderFormat? HotFolderFormat { get; set; }
+
+    public InstrumentSettings Clone() => new()
+    {
+        Enabled = Enabled,
+        Alias = Alias,
+        OutputDir = OutputDir,
+        RecentDir = RecentDir,
+        ShowKey = ShowKey,
+        ShowUnit = ShowUnit,
+        SelectedParameters = SelectedParameters is null ? null : new List<string>(SelectedParameters),
+        HotFolderDir = HotFolderDir,
+        HotFolderFormat = HotFolderFormat,
+    };
 }

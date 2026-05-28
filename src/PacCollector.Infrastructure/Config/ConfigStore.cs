@@ -40,7 +40,7 @@ public sealed class ConfigStore
 
     public AppConfig Snapshot()
     {
-        lock (_lock) return _config;
+        lock (_lock) return _config.Clone();
     }
 
     public void Replace(AppConfig newConfig)
@@ -49,14 +49,24 @@ public sealed class ConfigStore
         if (!string.IsNullOrEmpty(parent))
             Directory.CreateDirectory(parent);
 
-        var json = JsonSerializer.Serialize(newConfig, JsonOptions.Pretty);
-        var tmp = _path + ".tmp";
+        // clone defensivo del input asi el caller no puede mutarlo despues de Replace
+        var owned = newConfig.Clone();
+        var json = JsonSerializer.Serialize(owned, JsonOptions.Pretty);
+        var tmp = $"{_path}.{Guid.NewGuid():N}.tmp";
 
-        WriteAtomically(tmp, json);
-        File.Move(tmp, _path, overwrite: true);
+        try
+        {
+            WriteAtomically(tmp, json);
+            File.Move(tmp, _path, overwrite: true);
+        }
+        catch
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* best-effort cleanup */ }
+            throw;
+        }
 
-        lock (_lock) _config = newConfig;
-        Changed?.Invoke(this, newConfig);
+        lock (_lock) _config = owned;
+        Changed?.Invoke(this, owned.Clone());
     }
 
     // serializa el json al tmp con flush a disco antes del rename

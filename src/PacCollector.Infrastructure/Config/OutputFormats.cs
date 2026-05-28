@@ -9,4 +9,15 @@ public sealed class OutputFormats
     public bool WriteMasterCsv { get; set; } = true;
     public bool WriteGlobalMasterCsv { get; set; } = true;
     public bool MirrorToRecent { get; set; } = true;
+
+    public OutputFormats Clone() => new()
+    {
+        WriteJson = WriteJson,
+        WriteLimsTxt = WriteLimsTxt,
+        WriteLegibleTxt = WriteLegibleTxt,
+        WriteCurveCsv = WriteCurveCsv,
+        WriteMasterCsv = WriteMasterCsv,
+        WriteGlobalMasterCsv = WriteGlobalMasterCsv,
+        MirrorToRecent = MirrorToRecent,
+    };
 }

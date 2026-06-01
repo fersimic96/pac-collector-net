@@ -5,6 +5,7 @@
     <Project Path="src/PacCollector.Domain/PacCollector.Domain.csproj" />
     <Project Path="src/PacCollector.Infrastructure/PacCollector.Infrastructure.csproj" />
     <Project Path="src/PacCollector.Shell/PacCollector.Shell.csproj" />
+    <Project Path="src/PacCollector.MockDevice/PacCollector.MockDevice.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/PacCollector.Api.Tests/PacCollector.Api.Tests.csproj" />

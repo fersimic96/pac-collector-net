@@ -27,6 +27,12 @@ public sealed class PrintPluginSpec
 
     // metadata para la UI (descripciones de campos)
     public List<PrintFieldSpec> FieldSpecs { get; set; } = new();
+
+    // si true, aplica CR-overwrite (Windows printer dot-matrix two-column
+    // layout) al texto antes del field extraction. Necesario para OptiDist2
+    // y cualquier equipo cuya driver imprime via \r-separated segments.
+    // Independiente del Kind para que un futuro shape pueda reusar el renderer.
+    public bool RequiresCrRender { get; set; }
 }
 
 // mapping de un campo a extraer del reporte print.

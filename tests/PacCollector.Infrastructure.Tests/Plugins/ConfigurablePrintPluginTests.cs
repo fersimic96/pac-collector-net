@@ -18,11 +18,12 @@ public class ConfigurablePrintPluginTests
         => PrintPluginSpecLoader.LoadAll().Single(s => s.Id == id);
 
     [Fact]
-    public void Loader_LoadsAllThreeEmbeddedSpecs()
+    public void Loader_LoadsAllEmbeddedSpecs()
     {
         var specs = PrintPluginSpecLoader.LoadAll();
-        specs.Should().HaveCount(3);
-        specs.Select(s => s.AnalyzerType).Should().BeEquivalentTo(new[] { "OptiFZP", "OptiCPP", "OptiPMD" });
+        specs.Should().HaveCount(4);
+        specs.Select(s => s.AnalyzerType).Should()
+            .BeEquivalentTo(new[] { "OptiFZP", "OptiCPP", "OptiPMD", "OptiDist2" });
     }
 
     [Fact]

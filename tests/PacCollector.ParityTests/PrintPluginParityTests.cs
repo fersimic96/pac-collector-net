@@ -17,6 +17,7 @@ public class PrintPluginParityTests
     [InlineData("optifzp-print-builtin", "optifzp_print_8076.bin")]
     [InlineData("opticpp-print-builtin", "opticpp_print_8035.bin")]
     [InlineData("optipmd-print-builtin", "optipmd_print_1216.bin")]
+    [InlineData("optidist2-print-builtin", "optidist2_print_215003.bin")]
     public void ParseFixture_MatchesSnapshot(string specId, string fixtureName)
     {
         var spec = PrintPluginSpecLoader.LoadAll().Single(s => s.Id == specId);

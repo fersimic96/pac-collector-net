@@ -70,13 +70,19 @@ public sealed class ConfigurablePrintPlugin : IInstrumentPlugin
                 $"{_spec.HeaderMarker} header not found in print payload");
 
         var serialRaw = headerMatch.Groups[1].Value.Trim();
-        var firmware = headerMatch.Groups[2].Value.Trim();
+        // firmware es opcional: el header de OptiDist no incluye "V <fw>"
+        var firmware = headerMatch.Groups.Count > 2 ? headerMatch.Groups[2].Value.Trim() : "";
         var serial = AnalyzerSerial.Create(serialRaw);
+
+        // CR-overwrite renderer aplicado una sola vez si el spec lo requiere.
+        // OptiDist2 lo necesita; los demas usan cleaned directo.
+        var rendered = _spec.RequiresCrRender ? CrOverwriteRenderer.Render(cleaned) : cleaned;
 
         return _spec.Kind switch
         {
             PrintReportKind.LabelValue => ParseLabelValue(cleaned, rawText, serial, firmware, sourceIp, receivedAt),
             PrintReportKind.Distillation => ParseDistillation(cleaned, rawText, serial, firmware, sourceIp, receivedAt),
+            PrintReportKind.OptiDist => ParseOptiDist(cleaned, rendered, rawText, serial, sourceIp, receivedAt),
             _ => throw new MalformedMessageException($"unsupported print kind: {_spec.Kind}"),
         };
     }
@@ -218,6 +224,121 @@ public sealed class ConfigurablePrintPlugin : IInstrumentPlugin
             ReceivedAt = receivedAt,
             RawJson = rawText,
         };
+    }
+
+    // ── optidist (Windows printer CR-overwrite two-column, cubre OptiDist2) ──
+    // Opera sobre DOS textos:
+    //   - cleaned: pre-render, raw \r-separated. Usado solo para IBP (que vive
+    //     en la seccion "Distillation table" como segmento plano antes del page-break).
+    //   - rendered: post CR-overwrite. Usado para todo lo demas (date, operator,
+    //     product, sample id, recovery, residue, extras).
+    //
+    // El header de OptiDist no tiene "V <firmware>", asi que firmware queda "".
+    // Los mappings de _spec.ExtraFieldKeys solo se procesan si tienen Pattern
+    // (label-based no funciona — el CR-overwrite fragmenta los labels).
+    private Sample ParseOptiDist(
+        string cleaned,
+        string rendered,
+        string rawText,
+        AnalyzerSerial serial,
+        string? sourceIp,
+        DateTimeOffset receivedAt)
+    {
+        var startAt = ParseOptidistDateTime(rendered);
+        var operatorName = MatchTrimNullable(PrintRegex.OptidistOperator(), rendered);
+        var program = MatchTrimNullable(PrintRegex.OptidistProduct(), rendered);
+        var sampleIdentifier = MatchTrimOrEmpty(PrintRegex.OptidistSampleId(), rendered);
+        var recovery = MatchDouble(PrintRegex.OptidistRecovery(), rendered);
+        var residue = MatchDouble(PrintRegex.OptidistResidue(), rendered);
+
+        // IBP esta en la seccion "Distillation table" del texto PRE-render
+        // (la tabla es un bloque plano sin CR-overwrite, antes del page break).
+        var ibp = ExtractOptidistIbp(cleaned);
+
+        var extra = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        foreach (var map in _spec.ExtraFieldKeys)
+        {
+            // OptiDist: solo Pattern-based. Label-based no funciona porque
+            // los labels estan fragmentados por el CR-overwrite hasta aplicar render.
+            if (string.IsNullOrEmpty(map.Pattern)) continue;
+            var v = LabelMappingExtractor.Extract(map, rendered);
+            if (v is not null) extra[map.Key] = v;
+        }
+
+        var hpglIdx = rawText.IndexOf("%1BIN;", StringComparison.Ordinal);
+        if (hpglIdx >= 0) extra["hpgl_curve"] = rawText[hpglIdx..];
+
+        bool? endOfTest = ibp.HasValue ? true : null;
+
+        return new Sample
+        {
+            Uuid = Guid.NewGuid().ToString(),
+            Serial = serial,
+            AnalyzerType = _spec.AnalyzerType,
+            SampleIdentifier = sampleIdentifier,
+            Operator = operatorName,
+            Program = program,
+            StartAt = startAt,
+            EndAt = null,
+            Ibp = ibp,
+            Fbp = null,
+            Residue = residue,
+            Recovery = recovery,
+            FbpVolume = null,
+            EndOfTest = endOfTest,
+            AlarmBitmask = null,
+            Curve = DistillationCurve.Empty(),
+            Extra = extra,
+            SourceIp = sourceIp,
+            ReceivedAt = receivedAt,
+            RawJson = rawText,
+        };
+    }
+
+    private static DateTimeOffset? ParseOptidistDateTime(string rendered)
+    {
+        var m = PrintRegex.OptidistDate().Match(rendered);
+        if (!m.Success || m.Groups.Count < 3) return null;
+        var combined = $"{m.Groups[1].Value.Trim()} {m.Groups[2].Value.Trim()}";
+        if (DateTime.TryParseExact(
+                combined, "dd/MM/yyyy HH:mm:ss", Inv,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var dt))
+            return new DateTimeOffset(dt, TimeSpan.Zero);
+        return null;
+    }
+
+    private static string? MatchTrimNullable(Regex re, string text)
+    {
+        var m = re.Match(text);
+        if (!m.Success || m.Groups.Count < 2) return null;
+        var v = m.Groups[1].Value.Trim();
+        return v.Length == 0 ? null : v;
+    }
+
+    private static string MatchTrimOrEmpty(Regex re, string text)
+    {
+        var m = re.Match(text);
+        if (!m.Success || m.Groups.Count < 2) return "";
+        return m.Groups[1].Value.Trim();
+    }
+
+    private static double? MatchDouble(Regex re, string text)
+    {
+        var m = re.Match(text);
+        if (!m.Success || m.Groups.Count < 2) return null;
+        return double.TryParse(m.Groups[1].Value, NumberStyles.Float, Inv, out var v) ? v : null;
+    }
+
+    private static double? ExtractOptidistIbp(string cleaned)
+    {
+        // IBP vive en la seccion "Distillation table". Buscar desde ahi para
+        // evitar falsos positivos en otras menciones de "IBP" mas arriba del reporte.
+        var idx = cleaned.IndexOf("Distillation table", StringComparison.Ordinal);
+        var searchIn = idx >= 0 ? cleaned[idx..] : cleaned;
+        var m = PrintRegex.OptidistIbp().Match(searchIn);
+        if (!m.Success || m.Groups.Count < 2) return null;
+        return double.TryParse(m.Groups[1].Value, NumberStyles.Float, Inv, out var v) ? v : null;
     }
 
     // ── helpers ──

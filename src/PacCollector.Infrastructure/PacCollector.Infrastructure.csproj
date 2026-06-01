@@ -6,8 +6,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Plugins\Print\Specs\*.json" />
-    <EmbeddedResource Include="Plugins\Builtin\Specs\*.json" />
+    <!-- Exclude evita AppleDouble resource forks (._*.json) que macOS crea en
+         volumenes ExFAT y que rompen el JSON parser al ser embebidos. -->
+    <EmbeddedResource Include="Plugins\Print\Specs\*.json" Exclude="**\._*" />
+    <EmbeddedResource Include="Plugins\Builtin\Specs\*.json" Exclude="**\._*" />
   </ItemGroup>
 
   <ItemGroup>

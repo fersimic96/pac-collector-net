@@ -42,4 +42,33 @@ internal static partial class PrintRegex
     // fila de recovery: %R N % %r N %
     [GeneratedRegex(@"%R\s+(\d+(?:\.\d+)?)\s*%\s+%r\s+(\d+(?:\.\d+)?)\s*%")]
     public static partial Regex RecoveryResidue();
+
+    // ── OptiDist2 (Windows printer CR-overwrite, post-render) ──────────
+    // formato fecha del OptiDist2: DD/MM/YYYY HH:MM:SS
+    [GeneratedRegex(@"(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}:\d{2})")]
+    public static partial Regex OptidistDate();
+
+    // operator en columna derecha tras "Operat" (label truncado por CR-overwrite)
+    [GeneratedRegex(@"Operat(.+?)(?:\s{3,}|$)")]
+    public static partial Regex OptidistOperator();
+
+    // product en linea con label truncado "Produ"
+    [GeneratedRegex(@"Produ(.+?)(?:\s{3,}|$)")]
+    public static partial Regex OptidistProduct();
+
+    // sample id en linea con label truncado "Sampl"
+    [GeneratedRegex(@"Sampl(.+?)(?:\s{3,}|$)")]
+    public static partial Regex OptidistSampleId();
+
+    // recovery percent en la seccion Distillation results
+    [GeneratedRegex(@"Recovery\s*(\d+\.?\d*)\s*%")]
+    public static partial Regex OptidistRecovery();
+
+    // residue mL en la seccion Distillation results
+    [GeneratedRegex(@"Residue\s+(\d+\.?\d*)\s*[mM][lL]")]
+    public static partial Regex OptidistResidue();
+
+    // IBP temp en la seccion Distillation table (pre-CR-render, raw)
+    [GeneratedRegex(@"IBP\s+(\d+\.?\d*)")]
+    public static partial Regex OptidistIbp();
 }

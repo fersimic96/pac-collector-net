@@ -34,6 +34,18 @@ public static class PrintPluginSpecLoader
         return specs.Values.ToList();
     }
 
+    // carga UN spec desde un path explicito. Util para herramientas CLI que
+    // validan un spec aislado contra un fixture sin pasar por LoadAll.
+    // Strict: cualquier error parsea/valida tira ConfigInvalidException.
+    public static PrintPluginSpec LoadFromFile(string path)
+    {
+        var raw = File.ReadAllText(path);
+        var spec = Parse(raw, source: path);
+        if (spec is null)
+            throw new ConfigInvalidException("print_plugin_spec", $"{path}: empty or null spec");
+        return spec;
+    }
+
     private static IEnumerable<PrintPluginSpec> LoadEmbedded()
     {
         var asm = typeof(PrintPluginSpecLoader).Assembly;

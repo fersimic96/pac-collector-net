@@ -29,10 +29,28 @@ public sealed class PrintPluginSpec
     public List<PrintFieldSpec> FieldSpecs { get; set; } = new();
 }
 
+// mapping de un campo a extraer del reporte print.
+//
+// Dos modos de extraccion, mutuamente excluyentes:
+//   1) Label-based (default): cuando Pattern es null/vacio. Busca la linea
+//      "Label: value" usando capture_label() — comportamiento legacy.
+//   2) Regex-based: cuando Pattern tiene valor. Evalua el regex sobre el texto
+//      completo y extrae el grupo de captura indicado por Group (default 1).
+//
+// Regex es la "via de escape" para campos que no encajan en label-value
+// (ej. "Run #(\\d+)", "Calibration:\\s*([\\w-]+)\\s*\\([^)]+\\)"). Sin esto,
+// el integrador queda forzado a editar C# para casos atipicos.
 public sealed class PrintLabelMapping
 {
     public string Label { get; set; } = "";
     public string Key { get; set; } = "";
+
+    // si se setea, usa regex en vez de label-based. El pattern se evalua
+    // sobre el texto print con flags multilinea por default desde el caller.
+    public string? Pattern { get; set; }
+
+    // indice del grupo de captura del regex. Default 1 (primer grupo).
+    public int Group { get; set; } = 1;
 }
 
 public sealed class PrintFieldSpec

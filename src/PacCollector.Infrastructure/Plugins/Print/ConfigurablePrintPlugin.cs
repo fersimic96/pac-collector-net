@@ -116,7 +116,7 @@ public sealed class ConfigurablePrintPlugin : IInstrumentPlugin
 
         foreach (var map in _spec.ExtraFieldKeys)
         {
-            var v = CaptureLabel(cleaned, map.Label);
+            var v = LabelMappingExtractor.Extract(map, cleaned);
             if (v is not null) extra[map.Key] = v;
         }
 
@@ -176,8 +176,15 @@ public sealed class ConfigurablePrintPlugin : IInstrumentPlugin
         if (firmware.Length > 0) extra["FirmwareVersion"] = firmware;
         foreach (var map in _spec.ExtraFieldKeys)
         {
-            if (fields.TryGetValue(map.Label, out var v) && v.Length > 0)
-                extra[map.Key] = v;
+            // si el mapping tiene Pattern, evaluar regex sobre el texto completo.
+            // si no, mirar el dict de dos columnas (mas eficiente y respeta el layout).
+            string? value;
+            if (!string.IsNullOrEmpty(map.Pattern))
+                value = LabelMappingExtractor.Extract(map, cleaned);
+            else
+                value = fields.TryGetValue(map.Label, out var v) && v.Length > 0 ? v : null;
+
+            if (value is not null) extra[map.Key] = value;
         }
         var hpglIdx = rawText.IndexOf("%1BIN;", StringComparison.Ordinal);
         if (hpglIdx >= 0) extra["hpgl_curve"] = rawText[hpglIdx..];

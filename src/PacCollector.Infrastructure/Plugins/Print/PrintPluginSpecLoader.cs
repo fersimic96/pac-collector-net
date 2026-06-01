@@ -51,14 +51,28 @@ public static class PrintPluginSpecLoader
         }
     }
 
+    // override dir es tolerante a JSON malo: log warning + skip, no crashea
+    // el boot. Embedded resources siguen siendo strict (un .json embebido
+    // malformado significa un build malo, debe fallar visiblemente).
     private static IEnumerable<PrintPluginSpec> LoadFromDirectory(string dir)
     {
         foreach (var path in Directory.GetFiles(dir, "*.json", SearchOption.TopDirectoryOnly))
         {
             string raw;
             try { raw = File.ReadAllText(path); }
-            catch { continue; }
-            var spec = Parse(raw, source: path);
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Console.Error.WriteLine($"[print-plugin-loader] skipping {path}: read error ({e.Message})");
+                continue;
+            }
+
+            PrintPluginSpec? spec;
+            try { spec = Parse(raw, source: path); }
+            catch (ConfigInvalidException e)
+            {
+                Console.Error.WriteLine($"[print-plugin-loader] skipping {path}: {e.Message}");
+                continue;
+            }
             if (spec is not null) yield return spec;
         }
     }

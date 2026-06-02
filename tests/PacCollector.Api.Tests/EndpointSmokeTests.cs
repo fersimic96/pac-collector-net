@@ -72,15 +72,19 @@ public class EndpointSmokeTests : IClassFixture<ApiFixture>
     }
 
     [Fact]
-    public async Task ServerStatus_ReportsListenersStopped()
+    public async Task ServerStatus_HasAllExpectedFields()
     {
         var resp = await Client.GetAsync("/api/server/status");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
-        body.GetProperty("limsRunning").GetBoolean().Should().BeFalse();
+        body.GetProperty("running").GetBoolean().Should().BeFalse();
         body.GetProperty("printRunning").GetBoolean().Should().BeFalse();
         body.GetProperty("udpPort").GetUInt16().Should().Be(3000);
         body.GetProperty("tcpPort").GetUInt16().Should().Be(9980);
+        body.GetProperty("printPort").GetUInt16().Should().Be(631);
+        body.GetProperty("instrumentsCount").GetInt32().Should().Be(0);
+        body.GetProperty("samplesToday").GetUInt64().Should().Be(0);
+        body.TryGetProperty("serverIp", out _).Should().BeTrue();
     }
 
     [Fact]

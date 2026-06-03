@@ -65,3 +65,23 @@ vpk pack `
 
 Write-Host "Installer listo en: $releasesDir"
 Get-ChildItem $releasesDir | Format-Table Name, Length
+
+# 6) pac-mock: simulador de equipo PAC (console standalone). Self-contained
+# single-file paralelo al installer. Sirve para que YPF lo use desde linea
+# de comandos para validar el setup sin necesidad de un equipo PAC real.
+Write-Host "Publishing pac-mock (standalone console)..."
+$mockOutDir = Join-Path $releasesDir "pac-mock"
+if (Test-Path $mockOutDir) { Remove-Item -Recurse -Force $mockOutDir }
+dotnet publish src/PacCollector.MockDevice/PacCollector.MockDevice.csproj `
+    -c $Configuration -r $Runtime --self-contained `
+    -p:PublishSingleFile=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
+    -o $mockOutDir
+
+# renombrar para que tenga el nombre versionado
+$mockExe = Join-Path $mockOutDir "pac-mock.exe"
+if (Test-Path $mockExe) {
+    $versionedExe = Join-Path $releasesDir "pac-mock-$Version-$Runtime.exe"
+    Copy-Item $mockExe $versionedExe -Force
+    Write-Host "pac-mock listo: $versionedExe"
+}

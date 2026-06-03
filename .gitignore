@@ -41,3 +41,6 @@ coverage*.json
 # Velopack installer artifacts
 Releases/
 *.exe.config.deploy
+
+# release artifacts (binarios .exe/.zip + payloads de prueba)
+output/

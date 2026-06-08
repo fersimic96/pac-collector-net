@@ -8,6 +8,7 @@ using PacCollector.Domain.Ports;
 using PacCollector.Infrastructure.Config;
 using PacCollector.Infrastructure.EventBus;
 using PacCollector.Infrastructure.Filesystem;
+using PacCollector.Infrastructure.Hotfolder;
 using PacCollector.Infrastructure.Network;
 using PacCollector.Infrastructure.Persistence;
 using PacCollector.Infrastructure.Plugins;
@@ -27,11 +28,13 @@ var configPath = Path.Combine(dataDir, "settings.json");
 var instrumentsPath = Path.Combine(dataDir, "instruments.json");
 var limsPluginsOverrideDir = Path.Combine(dataDir, "plugins", "lims");
 var printPluginsOverrideDir = Path.Combine(dataDir, "plugins", "print");
+var hotfolderTemplatesOverrideDir = Path.Combine(dataDir, "hotfolder-templates");
 Directory.CreateDirectory(dataDir);
 Directory.CreateDirectory(dbDir);
 Directory.CreateDirectory(recentDir);
 Directory.CreateDirectory(limsPluginsOverrideDir);
 Directory.CreateDirectory(printPluginsOverrideDir);
+Directory.CreateDirectory(hotfolderTemplatesOverrideDir);
 
 // ── singletons del lado infrastructure ──
 var configStore = ConfigStore.Load(configPath);
@@ -46,8 +49,13 @@ builder.Services.AddSingleton(pluginRegistry); // impl concreta para uploads/rel
 builder.Services.AddSingleton<ChannelEventBus>(eventBus);
 builder.Services.AddSingleton<IEventBus>(eventBus);
 builder.Services.AddSingleton<ISampleRepository>(_ => new InMemorySampleRepository());
+// hotfolder templates: embedded built-in + override en disco.
+// Override es tolerante a JSON malo (skip + log), no rompe boot.
+var hotfolderTemplates = HotfolderTemplateLoader.LoadAll(hotfolderTemplatesOverrideDir)
+    .ToDictionary(t => t.Name, StringComparer.Ordinal);
+
 builder.Services.AddSingleton<IFileWriter>(sp =>
-    new FileWriterImpl(dbDir, recentDir, sp.GetRequiredService<ConfigStore>()));
+    new FileWriterImpl(dbDir, recentDir, sp.GetRequiredService<ConfigStore>(), hotfolderTemplates));
 
 // ── application services ──
 builder.Services.AddSingleton<SampleProcessingService>();
@@ -91,12 +99,23 @@ var app = builder.Build();
 app.UseCors();
 app.UseWebSockets();
 
-// servir el frontend buildeado (cuando exista wwwroot/)
-var wwwroot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+// servir el frontend buildeado. En single-file publish AppContext.BaseDirectory
+// apunta al folder temporal de extraccion, NO donde esta el .exe; entonces el
+// wwwroot/ (Content junto al exe) no se encuentra. Usamos Environment.ProcessPath
+// como fallback para resolver el folder real del exe.
+var exeDir = Path.GetDirectoryName(Environment.ProcessPath ?? typeof(Program).Assembly.Location)
+    ?? AppContext.BaseDirectory;
+var wwwroot = Path.Combine(exeDir, "wwwroot");
 if (Directory.Exists(wwwroot))
 {
-    app.UseDefaultFiles();
-    app.UseStaticFiles();
+    var fileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(wwwroot);
+    app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = fileProvider });
+    app.UseStaticFiles(new StaticFileOptions { FileProvider = fileProvider });
+    Console.WriteLine($"[wwwroot] serving frontend from {wwwroot}");
+}
+else
+{
+    Console.WriteLine($"[wwwroot] NOT FOUND at {wwwroot} - UI will be blank");
 }
 
 // arrancar los listeners si la config dice auto_start_server

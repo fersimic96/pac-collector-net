@@ -12,6 +12,10 @@ public sealed class InstrumentSettings
     public string? HotFolderDir { get; set; }
     public HotFolderFormat? HotFolderFormat { get; set; }
 
+    // referencia a un HotfolderTemplate por Name. Si esta seteado se usa en lugar
+    // del HotFolderFormat enum (cuya rama queda como fallback legacy).
+    public string? HotFolderTemplate { get; set; }
+
     public InstrumentSettings Clone() => new()
     {
         Enabled = Enabled,
@@ -23,5 +27,6 @@ public sealed class InstrumentSettings
         SelectedParameters = SelectedParameters is null ? null : new List<string>(SelectedParameters),
         HotFolderDir = HotFolderDir,
         HotFolderFormat = HotFolderFormat,
+        HotFolderTemplate = HotFolderTemplate,
     };
 }

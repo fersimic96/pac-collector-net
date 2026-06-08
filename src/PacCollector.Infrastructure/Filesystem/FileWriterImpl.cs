@@ -6,6 +6,7 @@ using PacCollector.Domain.Errors;
 using PacCollector.Domain.Ports;
 using PacCollector.Domain.ValueObjects;
 using PacCollector.Infrastructure.Config;
+using PacCollector.Infrastructure.Hotfolder;
 
 namespace PacCollector.Infrastructure.Filesystem;
 
@@ -17,13 +18,19 @@ public sealed class FileWriterImpl : IFileWriter
     private readonly string _dbDir;
     private readonly string _recentDir;
     private readonly ConfigStore _config;
+    private readonly IReadOnlyDictionary<string, HotfolderTemplate> _templates;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
 
-    public FileWriterImpl(string dbDir, string recentDir, ConfigStore config)
+    public FileWriterImpl(
+        string dbDir,
+        string recentDir,
+        ConfigStore config,
+        IReadOnlyDictionary<string, HotfolderTemplate>? hotfolderTemplates = null)
     {
         _dbDir = dbDir;
         _recentDir = recentDir;
         _config = config;
+        _templates = hotfolderTemplates ?? new Dictionary<string, HotfolderTemplate>(StringComparer.Ordinal);
     }
 
     public async Task WriteSampleArtifactsAsync(Sample sample, CancellationToken ct = default)
@@ -430,31 +437,56 @@ public sealed class FileWriterImpl : IFileWriter
         HotFolderFormat? fmt = null;
         string? dir = null;
         string? routeAlias = null;
+        string? templateName = null;
         if (cfg.InstrumentRoutes.TryGetValue(sample.Serial.AsString, out var route))
         {
             fmt = route.HotFolderFormat;
             dir = route.HotFolderDir;
             routeAlias = string.IsNullOrWhiteSpace(route.Alias) ? null : route.Alias;
+            templateName = route.HotFolderTemplate;
         }
         else if (cfg.Instruments.TryGetValue(sample.AnalyzerType, out var inst))
         {
             fmt = inst.HotFolderFormat;
             dir = inst.HotFolderDir;
+            routeAlias = string.IsNullOrWhiteSpace(inst.Alias) ? null : inst.Alias;
+            templateName = inst.HotFolderTemplate;
         }
-        if (fmt is null || string.IsNullOrEmpty(dir)) return;
+        if (string.IsNullOrEmpty(dir)) return;
 
         try { Directory.CreateDirectory(dir); }
         catch (Exception e) { throw new ConfigInvalidException("hot_folder_dir", $"cannot create {dir}: {e.Message}"); }
 
-        (string filename, string body)? payload = fmt switch
+        // template-driven path (nuevo). Si la route/settings tiene HotFolderTemplate
+        // seteado y el template existe, se usa. Si esta seteado pero no existe, log
+        // y cae al enum fallback (no rompe el flow).
+        (string filename, string body)? payload = null;
+        if (!string.IsNullOrEmpty(templateName))
         {
-            HotFolderFormat.LimsEthernet when isDistillation
-                => ($"{baseName}.txt", LimsEthernetTxt(sample, routeAlias)),
-            HotFolderFormat.LimsEthernet => null,
-            HotFolderFormat.CsvAll => ($"{baseName}.csv", SampleAllCsv(sample, routeAlias)),
-            HotFolderFormat.Csv => ($"{baseName}.curva.csv", CurveCsv(sample)),
-            _ => null,
-        };
+            if (_templates.TryGetValue(templateName, out var template))
+            {
+                var rendered = HotfolderTemplateRenderer.Render(template, sample, routeAlias);
+                payload = (rendered.Filename, rendered.Body);
+            }
+            else
+            {
+                Console.Error.WriteLine($"[hotfolder] template '{templateName}' not found, falling back to enum HotFolderFormat");
+            }
+        }
+
+        // enum fallback (legacy path): si no hay template o no se encontro, usar el switch
+        if (payload is null && fmt is not null)
+        {
+            payload = fmt switch
+            {
+                HotFolderFormat.LimsEthernet when isDistillation
+                    => ($"{baseName}.txt", LimsEthernetTxt(sample, routeAlias)),
+                HotFolderFormat.LimsEthernet => null,
+                HotFolderFormat.CsvAll => ($"{baseName}.csv", SampleAllCsv(sample, routeAlias)),
+                HotFolderFormat.Csv => ($"{baseName}.curva.csv", CurveCsv(sample)),
+                _ => null,
+            };
+        }
         if (payload is null) return;
 
         try

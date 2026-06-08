@@ -31,6 +31,10 @@ dotnet publish src/PacCollector.Api/PacCollector.Api.csproj `
     -p:PublishSingleFile=true `
     -p:IncludeNativeLibrariesForSelfExtract=true `
     -o $publishDir
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish del Api fallo con exit code $LASTEXITCODE" }
+if (-not (Test-Path (Join-Path $publishDir "PacCollector.Api.exe"))) {
+    throw "PacCollector.Api.exe NO se encontro en $publishDir post-publish"
+}
 
 # 3) publish del Shell (Photino) en la misma carpeta para que queden colaterales
 Write-Host "Publishing PacCollector.Shell..."
@@ -39,6 +43,10 @@ dotnet publish src/PacCollector.Shell/PacCollector.Shell.csproj `
     -p:PublishSingleFile=true `
     -p:IncludeNativeLibrariesForSelfExtract=true `
     -o $publishDir
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish del Shell fallo con exit code $LASTEXITCODE" }
+if (-not (Test-Path (Join-Path $publishDir "PacCollector.Shell.exe"))) {
+    throw "PacCollector.Shell.exe NO se encontro en $publishDir post-publish"
+}
 
 # 4) (opcional) copiar el frontend buildeado al wwwroot del Api
 $frontendDist = Join-Path $root "frontend/dist"

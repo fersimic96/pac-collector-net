@@ -1,56 +1,107 @@
+using System.Diagnostics;
 using PacCollector.Shell;
-using Photino.NET;
 using Velopack;
 
 // hook de velopack: maneja install/uninstall/update hooks del installer.
 // si la app NO esta instalada via velopack es no-op.
 VelopackApp.Build().Run();
 
-const string ApiUrl = "http://127.0.0.1:5174";
-const string HealthUrl = ApiUrl + "/api/health";
-const string AppTitle = "PAC Collector";
+// PacCollector.Shell.exe es un LAUNCHER liviano:
+//   1) chequea si PacCollector.Api.exe esta corriendo. Si no, lo arranca en background.
+//   2) espera a que /api/health responda.
+//   3) abre el browser default apuntando a http://127.0.0.1:5174 (la UI).
+//   4) sale. El Api sigue corriendo en background como cualquier otro proceso.
+//
+// Esta arquitectura reemplaza la idea original de Photino+WebView2 que daba pantalla
+// en blanco en algunas PCs Windows (path del usuario con espacios, WebView2 cache
+// flaky, etc). Usar el browser nativo del usuario es 100% confiable, soporta DevTools,
+// es lo que se conoce, y mantiene exactamente la misma UX (atajo en menu inicio
+// abre la "app").
+//
+// El Api persiste en background. Cerrar la ventana del browser NO mata el Api.
+// Para apagar el Api: Administrador de tareas -> PacCollector.Api.exe -> finalizar.
+
+const string DefaultApiUrl = "http://127.0.0.1:5174";
+var apiUrl = Environment.GetEnvironmentVariable("PAC_SHELL_URL") ?? DefaultApiUrl;
 const string ServiceName = "PacCollector";
 
-// 1) si el API service esta corriendo, abrimos directo la ventana sobre el.
-// 2) si no, lo arrancamos: SCM en Windows, sino spawn del binario .Api colateral.
-if (!await ApiReadyAsync(timeout: TimeSpan.FromMilliseconds(800)))
+// ── log a archivo (winexe sin consola) ──
+var logDir = Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+    "PacCollector",
+    "logs");
+Directory.CreateDirectory(logDir);
+var logPath = Path.Combine(logDir, $"shell-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+void Log(string msg)
 {
-    if (OperatingSystem.IsWindows() && ServiceController.IsServiceInstalled(ServiceName))
-        ServiceController.TryStart(ServiceName);
-    else
-        ApiLauncher.SpawnSibling();
+    try { File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}{Environment.NewLine}"); } catch { }
+}
+Log($"launcher starting; target URL: {apiUrl}");
 
-    // esperar hasta 10s a que el api responda
-    await WaitForApiAsync(timeout: TimeSpan.FromSeconds(10));
+// 1) si el Api esta corriendo, salteamos el arranque
+if (!await ApiReadyAsync(TimeSpan.FromMilliseconds(800)))
+{
+    Log("Api not running, starting...");
+    if (OperatingSystem.IsWindows() && ServiceController.IsServiceInstalled(ServiceName))
+    {
+        Log("Service installed, SCM TryStart");
+        ServiceController.TryStart(ServiceName);
+    }
+    else
+    {
+        Log("Spawning sibling Api.exe");
+        ApiLauncher.SpawnSibling();
+    }
+    var ready = await WaitForApiAsync(TimeSpan.FromSeconds(15));
+    Log($"Api ready after wait: {ready}");
+    if (!ready)
+    {
+        Log("ERROR: Api no respondio en 15s, abrimos browser igual");
+    }
+}
+else
+{
+    Log("Api was already running");
 }
 
-var window = new PhotinoWindow()
-    .SetTitle(AppTitle)
-    .SetUseOsDefaultSize(false)
-    .SetSize(1280, 800)
-    .SetResizable(true)
-    .Center()
-    .Load(new Uri(ApiUrl));
+// 2) abrir el browser default con la URL. ProcessStartInfo + UseShellExecute=true
+// hace que Windows abra el browser default registrado para http:// (Edge/Chrome/Firefox).
+try
+{
+    Log($"opening browser at {apiUrl}");
+    Process.Start(new ProcessStartInfo
+    {
+        FileName = apiUrl,
+        UseShellExecute = true,
+    });
+    Log("browser launched, exiting");
+}
+catch (Exception e)
+{
+    Log($"failed to launch browser: {e.Message}");
+}
 
-window.WaitForClose();
+// 3) salimos inmediato. El Api sigue corriendo en background.
+return 0;
 
-static async Task<bool> ApiReadyAsync(TimeSpan timeout)
+async Task<bool> ApiReadyAsync(TimeSpan timeout)
 {
     using var http = new HttpClient { Timeout = timeout };
     try
     {
-        var res = await http.GetAsync(HealthUrl);
+        var res = await http.GetAsync(apiUrl + "/api/health");
         return res.IsSuccessStatusCode;
     }
     catch { return false; }
 }
 
-static async Task WaitForApiAsync(TimeSpan timeout)
+async Task<bool> WaitForApiAsync(TimeSpan timeout)
 {
     var deadline = DateTime.UtcNow + timeout;
     while (DateTime.UtcNow < deadline)
     {
-        if (await ApiReadyAsync(TimeSpan.FromMilliseconds(500))) return;
+        if (await ApiReadyAsync(TimeSpan.FromMilliseconds(500))) return true;
         await Task.Delay(250);
     }
+    return false;
 }

@@ -66,6 +66,7 @@ Write-Host "Packing with vpk..."
 # Microsoft Edge WebView2 Runtime + .NET 10 Desktop Runtime si no estan presentes.
 # Sin esto, Photino abre ventana en blanco en PCs que no tengan WebView2 (Win10 sin update,
 # Servers, etc). YPF no quiere instalar nada manualmente.
+$iconPath = Join-Path $root "branding/pac-icon.ico"
 vpk pack `
     --packId PacCollector `
     --packVersion $Version `
@@ -73,7 +74,7 @@ vpk pack `
     --mainExe PacCollector.Shell.exe `
     --packTitle "PAC Collector" `
     --packAuthors "PAC Collector" `
-    --framework "webview2" `
+    --icon $iconPath `
     --outputDir $releasesDir
 
 Write-Host "Installer listo en: $releasesDir"

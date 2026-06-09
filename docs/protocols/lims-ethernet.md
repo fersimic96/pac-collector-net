@@ -6,48 +6,8 @@ Documentar el wire format del protocolo "LIMS Ethernet" que los equipos PAC
 (OptiPMD, OptiDist, OptiCPP, OptiFZP, etc.) emiten cuando el operador activa
 en el firmware del equipo la opción de salida **"LIMS Ethernet"**.
 
-Esta documentación es necesaria porque PAC L.P. no publica la especificación
-del protocolo en ningún canal técnico accesible. Cualquier integrador que
-quiera consumir los datos que el equipo emite vía esa opción de output
-necesita conocer el formato.
-
-## Origen de la especificación
-
-La especificación de este documento fue derivada por **observación pasiva
-de tráfico de red** en la red propia del laboratorio cliente, utilizando
-Wireshark sobre los datagramas que intercambia el equipo PAC con el software
-existente del cliente cuando el equipo está configurado en modo "LIMS Ethernet".
-
-No hubo desensamble, decompilación ni análisis de firmware del equipo PAC.
-No hubo modificación del software propietario existente. La técnica empleada
-es ingeniería de protocolo black-box estándar, equivalente a la que se realiza
-para documentar cualquier protocolo de red no publicado entre dos sistemas
-que operan sobre infraestructura del cliente.
-
-## Marco legal
-
-La documentación de este protocolo, así como su implementación en colectores
-de terceros para fines de interoperabilidad con el equipo PAC propiedad del
-cliente, está amparada por:
-
-- **Directiva UE 2009/24/CE, artículo 6** — excepción explícita de
-  descompilación e ingeniería inversa para lograr interoperabilidad cuando
-  el titular no provee la información necesaria por canales accesibles.
-- **DMCA §1201(f)** (EUA) — excepción para reverse engineering por
-  interoperabilidad.
-- **Jurisprudencia Sega v. Accolade (1992)** y **Sony v. Connectix (2000)** —
-  fair use sobre información funcional de interfaz, no protegible como
-  expresión creativa.
-
-La información derivada se limita estrictamente a lo necesario para que el
-colector dialogue con el equipo: bytes intercambiados, puertos, semántica
-mínima de campos. No se replica ni se extrae código del software propietario
-existente.
-
-El wire format en sí —tres bytes binarios de beacon y un string ASCII de
-ACK— no contiene algoritmos, cifrado ni elementos creativos protegibles. Es
-información funcional de interfaz, equivalente a saber qué voltaje espera un
-pin de un componente de hardware: condición necesaria para interoperar.
+Esta documentación es necesaria para cualquier integrador que quiera consumir
+los datos que el equipo emite vía esa opción de output.
 
 ## Especificación del protocolo
 

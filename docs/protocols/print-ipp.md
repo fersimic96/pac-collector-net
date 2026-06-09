@@ -6,9 +6,6 @@ Documentar el flujo de captura de datos cuando el operador activa en el
 firmware del equipo PAC la opción de salida **"Print over Ethernet"**, en la
 que el equipo se conecta a la IP configurada como impresora de red.
 
-A diferencia del [protocolo LIMS Ethernet](./lims-ethernet.md), este modo
-**utiliza estándares públicos del IETF** y no requirió ingeniería inversa.
-
 ## Naturaleza del protocolo
 
 El transporte es **Internet Printing Protocol (IPP)**, estándar IETF
@@ -24,20 +21,6 @@ también acepta **raw PCL/HP-GL** sobre la misma conexión TCP — un patrón
 clásico de "raw print queue" sin envoltura HTTP/IPP. El colector clasifica
 automáticamente la conexión entrante mirando los primeros bytes (HTTP method
 prefix → IPP, cualquier otra cosa → raw).
-
-## Estado legal
-
-Implementar un servidor IPP es trivial desde el punto de vista legal: es un
-estándar público de la IETF. Cualquier implementación tiene cobertura sobrada
-en cualquier jurisdicción. No aplica el debate de interoperabilidad porque
-no hay protocolo proprietario que documentar.
-
-El contenido del print payload (el reporte del ensayo en sí) **es un documento
-visible al operador** — diseñado para ser leído por un humano en papel. Su
-parseo por software es extracción de datos visibles, no reverse engineering
-de protocolo. Los campos extraídos (IBP, FBP, Recovery, Flash Point, etc.)
-están dictados por normas ASTM públicas (D86, D7345, D93, D93, etc.), no por
-PAC.
 
 ## Flujo completo
 
